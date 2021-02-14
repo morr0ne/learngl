@@ -1,0 +1,20 @@
+cargo-features = ["strip"]
+
+[package]
+name = "ggl"
+version = "0.1.0"
+authors = ["Federico Morrone <contact@morrone.dev>"]
+edition = "2018"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+# opt-level = "z"
+# panic = "abort"
+
+[dependencies]
+anyhow = "1.0.38"
+bytemuck = "1.5.0"
+glfw = "0.41.0"
+glow = "0.7.2"
