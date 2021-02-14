@@ -79,13 +79,12 @@ fn main() {
 
         let program = renderer.program_from_shaders(VERTEX_SHADER_SOURCE, FRAGMENT_SHADER_SOURCE);
 
-        type Vertex = [f32; 3];
+        type Vertex = [f32; 6];
 
-        let vertices: [Vertex; 4] = [
-            [0.5, 0.5, 0.0],
-            [0.5, -0.5, 0.0],
-            [-0.5, -0.5, 0.0],
-            [-0.5, 0.5, 0.0],
+        let vertices: [Vertex; 3] = [
+            [0.5, -0.5, 0.0, 1.0, 0.0, 1.0],
+            [-0.5, -0.5, 0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.5, 0.0, 0.0, 0.0, 1.0],
         ];
 
         let indices: [u32; 6] = [0, 1, 3, 1, 2, 3];
@@ -108,7 +107,20 @@ fn main() {
         gl.vertex_attrib_pointer_f32(0, 3, glow::FLOAT, false, size_of::<Vertex>() as i32, 0);
         gl.enable_vertex_attrib_array(0);
 
+        gl.vertex_attrib_pointer_f32(
+            1,
+            3,
+            glow::FLOAT,
+            false,
+            size_of::<Vertex>() as i32,
+            size_of::<[f32; 3]>() as i32,
+        );
+        gl.enable_vertex_attrib_array(1);
+
         // gl.polygon_mode(glow::FRONT_AND_BACK, glow::LINE);
+
+        let attr = gl.get_parameter_i32(glow::MAX_VERTEX_ATTRIBS);
+        println!("{}", attr);
 
         // Loop until the user closes the window
         while !window.should_close() {
@@ -127,7 +139,9 @@ fn main() {
             gl.clear(glow::COLOR_BUFFER_BIT);
 
             gl.use_program(Some(program));
-            gl.draw_elements(glow::TRIANGLES, 6, glow::UNSIGNED_INT, 0);
+
+            gl.draw_arrays(glow::TRIANGLES, 0, 3);
+            // gl.draw_elements(glow::TRIANGLES, 6, glow::UNSIGNED_INT, 0);
 
             // Swap front and back buffers
             window.swap_buffers();
