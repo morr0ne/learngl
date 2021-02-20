@@ -1,6 +1,6 @@
-use anyhow::{Context as AnyhowContext, Result};
+use anyhow::{Context as anyhowContext, Result};
 use bytemuck::bytes_of;
-use glfw::Context;
+use glfw::Context as glfwContext;
 use glow::HasContext;
 use std::{mem::size_of, rc::Rc};
 
@@ -11,47 +11,8 @@ const HEIGHT: u32 = 600;
 const VERTEX_SHADER_SOURCE: &str = include_str!("triangle.vert");
 const FRAGMENT_SHADER_SOURCE: &str = include_str!("triangle.frag");
 
-struct Renderer {
-    gl: Rc<glow::Context>,
-}
-
-impl Renderer {
-    unsafe fn create_shader(&self, shader_type: u32, shader_source: &str) -> u32 {
-        let gl = &self.gl;
-
-        let shader = gl.create_shader(shader_type).unwrap();
-        gl.shader_source(shader, shader_source);
-        gl.compile_shader(shader);
-        if !gl.get_shader_compile_status(shader) {
-            panic!("{}", gl.get_shader_info_log(shader));
-        }
-
-        shader
-    }
-
-    unsafe fn create_program(&self, vertex_shader: u32, fragment_shader: u32) -> u32 {
-        let gl = &self.gl;
-
-        let program = gl.create_program().unwrap();
-        gl.attach_shader(program, vertex_shader);
-        gl.attach_shader(program, fragment_shader);
-        gl.link_program(program);
-        if !gl.get_program_link_status(program) {
-            panic!("{}", gl.get_program_info_log(program));
-        }
-        gl.delete_shader(vertex_shader);
-        gl.delete_shader(fragment_shader);
-
-        program
-    }
-
-    unsafe fn program_from_shaders(&self, vertex_shader: &str, fragment_shader: &str) -> u32 {
-        let vertex_shader = self.create_shader(glow::VERTEX_SHADER, vertex_shader);
-        let fragment_shader = self.create_shader(glow::FRAGMENT_SHADER, fragment_shader);
-
-        self.create_program(vertex_shader, fragment_shader)
-    }
-}
+mod renderer;
+use renderer::Renderer;
 
 fn main() -> Result<()> {
     let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS)?;
@@ -75,17 +36,24 @@ fn main() -> Result<()> {
             window.get_proc_address(s)
         }));
 
-        let renderer = Renderer { gl: gl.clone() };
+        let renderer = Renderer { ctx: gl.clone() };
         gl.clear_color(0.2, 0.3, 0.3, 1.0);
 
-        let program = renderer.program_from_shaders(VERTEX_SHADER_SOURCE, FRAGMENT_SHADER_SOURCE);
+        let shader_program =
+            renderer.program_from_shaders(VERTEX_SHADER_SOURCE, FRAGMENT_SHADER_SOURCE);
+        gl.use_program(Some(shader_program));
 
-        type Vertex = [f32; 6];
+        type Vertex = [f32; 8];
 
-        let vertices: [Vertex; 3] = [
-            [0.5, -0.5, 0.0, 1.0, 0.0, 1.0],
-            [-0.5, -0.5, 0.0, 0.0, 1.0, 0.0],
-            [0.0, 0.5, 0.0, 0.0, 0.0, 1.0],
+        let vertices: [Vertex; 4] = [
+            // top right
+            [0.5, 0.5, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0],
+            // bottom right
+            [0.5, -0.5, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0],
+            // bottom left
+            [-0.5, -0.5, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+            // top left
+            [-0.5, 0.5, 0.0, 0.2, 0.3, 0.4, 0.0, 1.0],
         ];
 
         let indices: [u32; 6] = [0, 1, 3, 1, 2, 3];
@@ -105,6 +73,9 @@ fn main() -> Result<()> {
             glow::STATIC_DRAW,
         );
 
+        let _texture0 = renderer.texture_2d_from_image("src/container.jpg", glow::TEXTURE0)?;
+        let _texture1 = renderer.texture_2d_from_image("src/awesomeface.png", glow::TEXTURE1)?;
+
         gl.vertex_attrib_pointer_f32(0, 3, glow::FLOAT, false, size_of::<Vertex>() as i32, 0);
         gl.enable_vertex_attrib_array(0);
 
@@ -117,11 +88,32 @@ fn main() -> Result<()> {
             size_of::<[f32; 3]>() as i32,
         );
         gl.enable_vertex_attrib_array(1);
+        gl.vertex_attrib_pointer_f32(
+            2,
+            2,
+            glow::FLOAT,
+            false,
+            size_of::<Vertex>() as i32,
+            size_of::<[f32; 6]>() as i32,
+        );
+        gl.enable_vertex_attrib_array(2);
+
+        gl.uniform_1_i32(
+            Some(
+                &gl.get_uniform_location(shader_program, "texture0")
+                    .context("No uniform found at location: texture0")?,
+            ),
+            0,
+        );
+        gl.uniform_1_i32(
+            Some(
+                &gl.get_uniform_location(shader_program, "texture1")
+                    .context("No uniform found at locatiom: texture1")?,
+            ),
+            1,
+        );
 
         // gl.polygon_mode(glow::FRONT_AND_BACK, glow::LINE);
-
-        let attr = gl.get_parameter_i32(glow::MAX_VERTEX_ATTRIBS);
-        println!("{}", attr);
 
         // Loop until the user closes the window
         while !window.should_close() {
@@ -137,12 +129,23 @@ fn main() -> Result<()> {
                     _ => {}
                 }
             }
+
+            let mut trans = glam::Mat4::from_rotation_x(glfw.get_time() as f32);
+            trans = trans * glam::Mat4::from_rotation_y(glfw.get_time() as f32);
+            trans = trans * glam::Mat4::from_rotation_z(glfw.get_time() as f32);
+
+            gl.uniform_matrix_4_f32_slice(
+                Some(
+                    &gl.get_uniform_location(shader_program, "transform")
+                        .context("No uniform found at locatiom: transform")?,
+                ),
+                true,
+                &trans.to_cols_array(),
+            );
+
             gl.clear(glow::COLOR_BUFFER_BIT);
 
-            gl.use_program(Some(program));
-
-            gl.draw_arrays(glow::TRIANGLES, 0, 3);
-            // gl.draw_elements(glow::TRIANGLES, 6, glow::UNSIGNED_INT, 0);
+            gl.draw_elements(glow::TRIANGLES, 6, glow::UNSIGNED_INT, 0);
 
             // Swap front and back buffers
             window.swap_buffers();
