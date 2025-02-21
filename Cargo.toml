@@ -3,7 +3,7 @@ cargo-features = ["strip"]
 [package]
 name = "ggl"
 version = "0.1.0"
-authors = ["Federico Morrone <contact@morrone.dev>"]
+authors = ["Matilde Morrone <contact@morrone.dev>"]
 edition = "2018"
 
 [profile.release]
